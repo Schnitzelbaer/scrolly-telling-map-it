@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+
+# Roh-Bilder (schwere Quelldateien, nicht fuers Deploy noetig)
+/New Assets/
+/Frame 1.png
+/Frame 2.png
+/Frame 3.png
+/Frame 4.png
+
+# Vercel
+.vercel
+
+# Node (falls je hinzukommt)
+node_modules/
