@@ -87,14 +87,18 @@
     letter-spacing:-.01em;
   }
 
-  /* Mobil: Text unter das Bild */
-  @media (max-width:820px){
-    .frame__img{width:88vw;max-height:56vh}
+  /* Hochformat (Mobile + Tablet hochkant): Text oben fix, Bild breit & zentriert,
+     gestapeltes Overlay. Positionierung/Animation kommt aus dem Script. */
+  @media (orientation:portrait){
+    .frame__img{width:90vw;max-height:66vh}
     .frame__text{
-      width:min(82vw,420px);
-      text-align:center;
+      top:7%;
+      left:6%;
+      width:88vw;
+      text-align:left;
+      transition:opacity .25s ease;   /* kurzes Ueberblenden beim Wechsel */
     }
-    .frame__text h2{font-size:clamp(1.3rem,5.5vw,1.9rem)}
+    .frame__text h2{font-size:clamp(1.7rem,5.4vw,2.9rem)}
   }
 
   /* Reduzierte Bewegung: kein Snap-Zwang, sanfte statische Darstellung */
@@ -149,15 +153,21 @@
   const IMG_FLOOR   = .50;
   const TXT_FLOOR   = .30;
 
+  // Hochformat (Mobile/Tablet hochkant): gestapeltes Overlay
+  const P_ANCHOR    = .48;   // vertikaler Anker des aktiven Bildes (Anteil vh)
+  const P_RISE      = 1.10;  // Aufstiegsdistanz des naechsten Bildes (x Bildhoehe)
+  const P_SCALE     = .90;   // Skalier-Boden des transparenten Bildes
+  const P_IMG_FLOOR = .40;   // Deckkraft-Boden des naechsten (transparenten) Bildes
+
   const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
   const lerp  = (a,b,t) => a + (b-a)*t;
 
   // px-Werte, die von vw/vh-CSS abhaengen -> bei Resize neu lesen
   const HGAP = 44;      // horizontaler Abstand Bild <-> Text
   const VGAP = 0.05;    // vertikaler Abstand ZWISCHEN Frames (Anteil der Bildhoehe-Basis)
-  let OFFSET_PX = 0, IMG_HALF = 0, IMG_SHIFT = 0, TEXT_W = 0;
+  let OFFSET_PX = 0, IMG_HALF = 0, IMG_SHIFT = 0, TEXT_W = 0, ANCHOR_PX = 0;
   function readMetrics(){
-    const mobile = window.matchMedia('(max-width:820px)').matches;
+    const portrait = window.matchMedia('(orientation: portrait)').matches;
 
     // WICHTIG: unskalierte Masse via offsetWidth/offsetHeight (ignorieren die
     // Scale-Transform der Frames). getBoundingClientRect() waere um die aktuelle
@@ -171,29 +181,56 @@
     const imgW = Math.min(boxW, boxH*AR);
     const imgH = Math.min(boxH, boxW/AR);
 
-    // Konstanter Mitten-Abstand zwischen benachbarten Frames = Bildhoehe + fester Gap.
-    // Da er >= Bildhoehe ist, koennen sich zwei Frames NIE ueberlagern.
-    OFFSET_PX = imgH + VGAP*window.innerHeight;
-
-    TEXT_W = frames[0].text.offsetWidth || Math.min(window.innerWidth*.30, 360);
-
+    TEXT_W   = frames[0].text.offsetWidth || Math.min(window.innerWidth*.30, 360);
     IMG_HALF = imgW/2;   // halbe (unskalierte) Bildbreite -> fuer die skalierte rechte Kante
 
-    if(mobile){
-      IMG_SHIFT = 0;   // Bild zentriert, Text darunter
+    if(portrait){
+      // Hochformat: Bild horizontal zentriert; naechstes Bild steigt von unten auf.
+      IMG_SHIFT = 0;
+      ANCHOR_PX = (P_ANCHOR - 0.5) * window.innerHeight;   // vertikaler Anker (relativ zur Mitte)
+      OFFSET_PX = imgH * P_RISE;                           // Aufstiegsdistanz des naechsten Bildes
     }else{
-      // Bild + Luecke + Text: Gruppe im AKTIV-Zustand (scale=1) zentriert.
-      IMG_SHIFT = (TEXT_W + HGAP) / 2;                 // Bild nach links
+      // Desktop/Querformat: Filmstreifen nebeneinander, konstanter Abstand (nie ueberlappend).
+      IMG_SHIFT = (TEXT_W + HGAP) / 2;
+      ANCHOR_PX = 0;
+      OFFSET_PX = imgH + VGAP*window.innerHeight;
     }
-    return mobile;
+    return portrait;
   }
 
-  let mobile = false;
+  let portrait = false;
 
   function render(){
     const p = clamp(window.scrollY / window.innerHeight, 0, N-1);
 
+    const active = Math.round(p);   // fuer Hochformat: welcher Frame gilt als aktiv
+
     frames.forEach(fr => {
+
+      if(portrait){
+        // === HOCHFORMAT: Text oben (diskreter Wechsel), Bilder gestapelt (naechstes deckt aktives) ===
+        // Text bleibt fix oben; nur der aktive ist sichtbar -> Wechsel erst beim Einrasten.
+        fr.text.style.transform = 'none';
+        fr.text.style.opacity   = (fr.i === active) ? 1 : 0;
+
+        // Bild: aktiv/vergangen bleibt fix & deckend; kommendes steigt von unten auf,
+        //       waechst auf volle Groesse und wird deckend -> legt sich ueber das aktive.
+        const e = fr.i - p;               // >0 = kommt noch (unten), <=0 = aktiv/vergangen
+        let scale = 1, imgOp = 1, offY = 0;
+        if(e > 0){
+          scale = lerp(1, P_SCALE, clamp(e,0,1));                 // transparent -> etwas kleiner
+          imgOp = (e <= 1) ? lerp(1, P_IMG_FLOOR, e)              // naechstes: teils transparent
+                           : lerp(P_IMG_FLOOR, 0, clamp(e-1,0,1)); // uebernaechstes: ausblenden
+          offY  = e * OFFSET_PX;                                   // weiter unten je groesser e
+        }
+        fr.img.style.transform =
+          'translate(-50%, calc(-50% + ' + (ANCHOR_PX + offY) + 'px)) scale(' + scale + ')';
+        fr.img.style.opacity = imgOp;
+        fr.el.style.zIndex   = fr.i;      // spaeteres Bild liegt ueber frueherem
+        return;
+      }
+
+      // === DESKTOP / QUERFORMAT: Filmstreifen nebeneinander ===
       const d  = p - fr.i;              // 0 = aktiv
       const ad = Math.abs(d);
 
@@ -211,24 +248,14 @@
 
       const offsetY = -d * OFFSET_PX;   // konstanter Abstand -> Filmstreifen, nie ueberlappend
 
-      // Bild: horizontal -50% (zentriert) minus IMG_SHIFT (nach links);
-      //       vertikal -50% (zentriert) + offsetY (Nachbar-Versatz). Bild-Mitte = Karten-Mitte.
       fr.img.style.transform =
         'translate(calc(-50% - ' + IMG_SHIFT + 'px), calc(-50% + ' + offsetY + 'px)) scale(' + scale + ')';
       fr.img.style.opacity = imgOp;
 
-      // Text: nur Position (keine Skalierung), auf Anker (Karten-Mitte) zentriert
-      if(mobile){
-        // horizontal zentriert, unter dem Bild
-        fr.text.style.transform =
-          'translate(-50%, calc(28vh + ' + offsetY + 'px))';
-      }else{
-        // Text folgt der SKALIERTEN rechten Bildkante -> Abstand bleibt in JEDEM
-        // Zustand konstant HGAP (inaktiv = Bild kleiner -> Text rueckt naeher/links).
-        const textX = scale*IMG_HALF - IMG_SHIFT + HGAP;
-        fr.text.style.transform =
-          'translate(' + textX + 'px, calc(-50% + ' + offsetY + 'px))';
-      }
+      // Text folgt der SKALIERTEN rechten Bildkante -> Abstand konstant HGAP.
+      const textX = scale*IMG_HALF - IMG_SHIFT + HGAP;
+      fr.text.style.transform =
+        'translate(' + textX + 'px, calc(-50% + ' + offsetY + 'px))';
       fr.text.style.opacity = txtOp;
 
       fr.el.style.zIndex = Math.round((1-ad)*100);
@@ -241,12 +268,13 @@
     if(!ticking){ ticking = true; requestAnimationFrame(()=>{ render(); ticking=false; }); }
   }
 
-  function onResize(){ mobile = readMetrics(); render(); }
+  function onResize(){ portrait = readMetrics(); render(); }
 
   window.addEventListener('scroll', onScroll, {passive:true});
   window.addEventListener('resize', onResize);
+  window.addEventListener('orientationchange', onResize);
   window.addEventListener('load', onResize);
-  mobile = readMetrics();
+  portrait = readMetrics();
   render();
 })();
 </script>
