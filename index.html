@@ -90,15 +90,20 @@
   /* Hochformat (Mobile + Tablet hochkant): Text oben fix, Bild breit & zentriert,
      gestapeltes Overlay. Positionierung/Animation kommt aus dem Script. */
   @media (orientation:portrait){
-    /* Bild rechts anschneiden: Container-Seitenverhaeltnis = (2/3) x Bild-AR (1.755),
-       object-fit cover + object-position left -> nur die linken ~2/3 der Breite sichtbar. */
+    /* Randabfallend: volle Breite, rechte Kante am Bildschirmrand. Rechts anschneiden via
+       Container-AR = (2/3) x Bild-AR (1.755) + object-fit cover + object-position left. */
     .frame__img{
-      width:92vw;
+      left:0;
+      right:auto;
+      width:100vw;
       max-height:none;
-      aspect-ratio:1.17;      /* (2/3) * 1.755 */
+      aspect-ratio:1.17;      /* (2/3) * 1.755 -> linke 2/3 der Breite sichtbar */
       height:auto;
       object-fit:cover;
       object-position:left center;
+      transform-origin:right center;  /* Scale haelt die rechte Kante am Rand -> auch transparent randabfallend */
+      border-radius:0;
+      box-shadow:none;
     }
     .frame__text{
       top:5.5%;
@@ -167,7 +172,8 @@
   const P_RISE      = 1.05;  // Aufstiegsdistanz des naechsten Bildes (x sichtbare Bildhoehe)
   const P_SCALE     = .90;   // Skalier-Boden des transparenten Bildes
   const P_IMG_FLOOR = .40;   // Deckkraft-Boden des naechsten (transparenten) Bildes
-  const P_FADE      = 2.2;   // >1 = Transparenz wird beim Scrollen schneller abgebaut (nur Hochformat)
+  const P_FADE      = 4.0;   // >1 = Transparenz wird beim Scrollen schneller abgebaut (nur Hochformat)
+  const P_OUT       = .35;   // Scroll-Bereich, in dem das vorherige Bild ausgeblendet wird (0 = beim Einrasten weg)
 
   const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
   const lerp  = (a,b,t) => a + (b-a)*t;
@@ -229,8 +235,8 @@
         fr.text.style.transform = 'none';
         fr.text.style.opacity   = (fr.i === active) ? 1 : 0;
 
-        // Bild: aktiv/vergangen bleibt fix & deckend; kommendes steigt von unten auf,
-        //       waechst auf volle Groesse und wird deckend -> legt sich ueber das aktive.
+        // Bild: kommendes steigt von unten auf, wird schnell deckend, legt sich ueber das aktive.
+        //       Vorheriges Bild wird schnell ausgeblendet, sobald das naechste eingerastet ist.
         const e = fr.i - p;               // >0 = kommt noch (unten), <=0 = aktiv/vergangen
         let scale = 1, imgOp = 1, offY = 0;
         if(e > 0){
@@ -238,9 +244,13 @@
           imgOp = (e <= 1) ? lerp(1, P_IMG_FLOOR, Math.pow(e, P_FADE))  // schneller Deckkraft-Aufbau
                            : lerp(P_IMG_FLOOR, 0, clamp(e-1,0,1)); // uebernaechstes: ausblenden
           offY  = e * OFFSET_PX;                                   // weiter unten je groesser e
+        }else{
+          // aktiv (e=0) deckend; sobald das naechste einrastet (e -> -1) schnell ausblenden
+          imgOp = clamp((e + 1) / P_OUT, 0, 1);
         }
+        // translateX(0): rechte Kante bleibt (via transform-origin) am Bildschirmrand -> randabfallend
         fr.img.style.transform =
-          'translate(-50%, calc(-50% + ' + (ANCHOR_PX + offY) + 'px)) scale(' + scale + ')';
+          'translate(0px, calc(-50% + ' + (ANCHOR_PX + offY) + 'px)) scale(' + scale + ')';
         fr.img.style.opacity = imgOp;
         fr.el.style.zIndex   = fr.i;      // spaeteres Bild liegt ueber frueherem
         return;
