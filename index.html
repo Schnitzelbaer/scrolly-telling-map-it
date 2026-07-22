@@ -90,20 +90,17 @@
   /* Hochformat (Mobile + Tablet hochkant): Text oben fix, Bild breit & zentriert,
      gestapeltes Overlay. Positionierung/Animation kommt aus dem Script. */
   @media (orientation:portrait){
-    /* Randabfallend: volle Breite, rechte Kante am Bildschirmrand. Rechts anschneiden via
-       Container-AR = (2/3) x Bild-AR (1.755) + object-fit cover + object-position left. */
+    /* Karte breiter als der Screen: linke 2/3 sichtbar, rechts randabfallend ueber den Rand.
+       Linker Abstand (--pm) bleibt sichtbar. Schatten/Ecken via .frame__img--card (global). */
     .frame__img{
-      left:0;
+      --pm:4vw;                                    /* linker Abstand des aktiven Bildes */
+      left:var(--pm);
       right:auto;
-      width:100vw;
+      width:calc((100vw - var(--pm)) * 1.5);       /* 2/3 sichtbar -> Rest faellt rechts ab */
       max-height:none;
-      aspect-ratio:1.17;      /* (2/3) * 1.755 -> linke 2/3 der Breite sichtbar */
       height:auto;
-      object-fit:cover;
-      object-position:left center;
-      transform-origin:right center;  /* Scale haelt die rechte Kante am Rand -> auch transparent randabfallend */
-      border-radius:0;
-      box-shadow:none;
+      transform-origin:right center;               /* Scale haelt rechte Kante am Rand -> transparent
+                                                      bleibt randabfallend & rueckt links weiter ein */
     }
     .frame__text{
       top:5.5%;
