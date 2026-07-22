@@ -90,9 +90,18 @@
   /* Hochformat (Mobile + Tablet hochkant): Text oben fix, Bild breit & zentriert,
      gestapeltes Overlay. Positionierung/Animation kommt aus dem Script. */
   @media (orientation:portrait){
-    .frame__img{width:90vw;max-height:66vh}
+    /* Bild rechts anschneiden: Container-Seitenverhaeltnis = (2/3) x Bild-AR (1.755),
+       object-fit cover + object-position left -> nur die linken ~2/3 der Breite sichtbar. */
+    .frame__img{
+      width:92vw;
+      max-height:none;
+      aspect-ratio:1.17;      /* (2/3) * 1.755 */
+      height:auto;
+      object-fit:cover;
+      object-position:left center;
+    }
     .frame__text{
-      top:7%;
+      top:5.5%;
       left:6%;
       width:88vw;
       text-align:left;
@@ -154,10 +163,11 @@
   const TXT_FLOOR   = .30;
 
   // Hochformat (Mobile/Tablet hochkant): gestapeltes Overlay
-  const P_ANCHOR    = .48;   // vertikaler Anker des aktiven Bildes (Anteil vh)
-  const P_RISE      = 1.10;  // Aufstiegsdistanz des naechsten Bildes (x Bildhoehe)
+  const P_GAP       = .03;   // Abstand Text -> Bild (Anteil vh); Bild sitzt direkt unter dem Text
+  const P_RISE      = 1.05;  // Aufstiegsdistanz des naechsten Bildes (x sichtbare Bildhoehe)
   const P_SCALE     = .90;   // Skalier-Boden des transparenten Bildes
   const P_IMG_FLOOR = .40;   // Deckkraft-Boden des naechsten (transparenten) Bildes
+  const P_FADE      = 2.2;   // >1 = Transparenz wird beim Scrollen schneller abgebaut (nur Hochformat)
 
   const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
   const lerp  = (a,b,t) => a + (b-a)*t;
@@ -186,9 +196,15 @@
 
     if(portrait){
       // Hochformat: Bild horizontal zentriert; naechstes Bild steigt von unten auf.
+      // boxH = sichtbare Container-Hoehe (object-fit:cover, rechts angeschnitten).
       IMG_SHIFT = 0;
-      ANCHOR_PX = (P_ANCHOR - 0.5) * window.innerHeight;   // vertikaler Anker (relativ zur Mitte)
-      OFFSET_PX = imgH * P_RISE;                           // Aufstiegsdistanz des naechsten Bildes
+      // Bild mit festem Abstand DIREKT unter den (hoechsten) Text setzen -> Text nah am Bild,
+      // unabhaengig von der Anzahl Textzeilen (1 Zeile Tablet / 2 Zeilen Handy).
+      let textBottom = 0;
+      frames.forEach(f => { const t = f.text; textBottom = Math.max(textBottom, t.offsetTop + t.offsetHeight); });
+      const imgCenter = textBottom + P_GAP*window.innerHeight + boxH/2;
+      ANCHOR_PX = imgCenter - window.innerHeight/2;         // vertikaler Anker (relativ zur Mitte)
+      OFFSET_PX = boxH * P_RISE;                            // Aufstiegsdistanz des naechsten Bildes
     }else{
       // Desktop/Querformat: Filmstreifen nebeneinander, konstanter Abstand (nie ueberlappend).
       IMG_SHIFT = (TEXT_W + HGAP) / 2;
@@ -219,7 +235,7 @@
         let scale = 1, imgOp = 1, offY = 0;
         if(e > 0){
           scale = lerp(1, P_SCALE, clamp(e,0,1));                 // transparent -> etwas kleiner
-          imgOp = (e <= 1) ? lerp(1, P_IMG_FLOOR, e)              // naechstes: teils transparent
+          imgOp = (e <= 1) ? lerp(1, P_IMG_FLOOR, Math.pow(e, P_FADE))  // schneller Deckkraft-Aufbau
                            : lerp(P_IMG_FLOOR, 0, clamp(e-1,0,1)); // uebernaechstes: ausblenden
           offY  = e * OFFSET_PX;                                   // weiter unten je groesser e
         }
